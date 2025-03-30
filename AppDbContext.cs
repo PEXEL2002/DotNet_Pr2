@@ -30,40 +30,64 @@ namespace DotNet_Pr2
                         .HasForeignKey(t => t.UserId);
         }
 
-        private async Task EnsureDataLoaded(){
-            if (!Users.Any() && !ToDos.Any()){
-                Console.WriteLine("[DB INIT] Pobieranie danych z API...");
-                DownlowdDataFromAPI dAPI = new DownlowdDataFromAPI();
-                string usersJson = await dAPI.GetData("https://dummyjson.com/users");
-                string todosJson = await dAPI.GetData("https://dummyjson.com/todos");
-                var users = JsonSerializer.Deserialize<UserResponse>(usersJson)?.users;
-                var todos = JsonSerializer.Deserialize<ToDoResponse>(todosJson)?.todos;
-                if (users != null){
-                    var userEntities = users.Select(u => new UsersEntity{
-                        Id = u.id,
-                        FirstName = u.firstName,
-                        LastName = u.lastName,
-                        Age = u.age,
-                        Gender = u.gender,
-                        ToDos = new List<ToDoEntity>()
-                    }).ToList();
-
-                    Users.AddRange(userEntities);
-                }
-                if (todos != null){
-                    var todoEntities = todos.Select(t => new ToDoEntity
+        private async Task EnsureDataLoaded()
+        {
+            if (!Users.Any() && !ToDos.Any())
+            {
+                try
+                {
+                    Console.WriteLine("[DB INIT] Pobieranie danych z API...");
+                    DownlowdDataFromAPI dAPI = new DownlowdDataFromAPI();
+                    string usersJson = await dAPI.GetData("https://dummyjson.com/users");
+                    string todosJson = await dAPI.GetData("https://dummyjson.com/todos");
+                    var users = JsonSerializer.Deserialize<UserResponse>(usersJson)?.users;
+                    var todos = JsonSerializer.Deserialize<ToDoResponse>(todosJson)?.todos;
+                    if (users != null)
                     {
-                        Id = t.id,
-                        Task = t.todo,
-                        IsDone = t.completed,
-                        UserId = t.userId
-                    }).ToList();
-                    ToDos.AddRange(todoEntities);
+                        var userEntities = users.Select(u => new UsersEntity
+                        {
+                            Id = u.id,
+                            FirstName = u.firstName,
+                            LastName = u.lastName,
+                            Age = u.age,
+                            Gender = u.gender,
+                            ToDos = new List<ToDoEntity>()
+                        }).ToList();
+
+                        Users.AddRange(userEntities);
+                        SaveChanges();
+                    }
+
+                    if (todos != null)
+                    {
+                        var userIds = this.Users.Select(u => u.Id).ToHashSet();
+
+                        var todoEntities = todos
+                            .Where(t => userIds.Contains(t.userId))
+                            .Select(t => new ToDoEntity
+                            {
+                                Id = t.id,
+                                Task = t.todo,
+                                IsDone = t.completed,
+                                UserId = t.userId
+                            }).ToList();
+
+                        ToDos.AddRange(todoEntities);
+                        SaveChanges();
+                    }
                 }
-                SaveChanges();
+                catch (DbUpdateException ex)
+                {
+                    Console.WriteLine($"DbUpdateException: {ex.Message}");
+                    if (ex.InnerException != null)
+                    {
+                        Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                    }
+                }
                 Console.WriteLine("[DB INIT] Dane zostały zapisane do bazy.");
             }
-            else{
+            else
+            {
                 Console.WriteLine("[DB INIT] Dane pobrane z pliku.");
             }
         }
